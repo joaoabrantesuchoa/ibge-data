@@ -4,138 +4,122 @@ import seaborn as sns
 import numpy as np
 from math import pi
 
+# Configurar estilo de gráficos
+plt.style.use('ggplot')
+colors = ['#2ecc71', '#3498db', '#9b59b6']
+sns.set_palette(sns.color_palette(colors))
+
 # Função para limpar valores numéricos
 def clean_numeric(value):
     if isinstance(value, str):
         return float(value.split()[0].replace('.', '').replace(',', '.'))
     return value
 
-# Carregar e processar os dados
-df = pd.read_csv('data-ceara.csv', 
-                 decimal=',', 
-                 thousands='.', 
-                 encoding='utf-8')
+def load_and_clean_data(filepath, numeric_cols, decimal=',', thousands='.', encoding='utf-8'):
+    df = pd.read_csv(filepath, decimal=decimal, thousands=thousands, encoding=encoding)
+    for col in numeric_cols:
+        df[col] = df[col].apply(clean_numeric)
 
-# Lista de colunas numéricas para limpeza
-numeric_cols = [
-    'Índice de Desenvolvimento Humano Municipal (IDHM)',
-    'PIB per capita',
-    'População no último censo',
-    'Densidade demográfica',
-    'Área urbanizada',
-    'Urbanização de vias públicas',
-    'Arborização de vias públicas'
-]
+    if 'Hierarquia urbana' in df.columns:
+        df['Hierarquia urbana'] = df['Hierarquia urbana'].str.split(' - ').str[0]
+    
+    return df
 
-# Aplicar limpeza nas colunas numéricas
-for col in numeric_cols:
-    df[col] = df[col].apply(clean_numeric)
+# Função para gerar gráficos de barras comparativos
+def plot_comparative_bars(df, cidades_alvo, indicadores, municipio_col='Municípios'):
+    df_filtrado = df[df[municipio_col].isin(cidades_alvo)]
+    plt.figure(figsize=(14, 8))
+    for i, indicador in enumerate(indicadores, 1):
+        plt.subplot(2, 2, i)
+        barplot = sns.barplot(
+            x=municipio_col, y=indicador, data=df_filtrado, hue=municipio_col, palette='Set2', dodge=False
+        )
+        plt.title(indicador.split('(')[0].strip())
+        plt.xticks(rotation=45)
+        for container in barplot.containers:
+            barplot.bar_label(container, fmt='%.3f')
+    plt.tight_layout()
+    plt.show()
 
-# Configurações de estilo
-plt.style.use('ggplot')
-colors = ['#2ecc71', '#3498db', '#9b59b6']
-sns.set_palette(sns.color_palette(colors))
+def plot_scatter_density_vs_area(df, x_col, y_col, category_col, highlight_cities=None):
+    plt.figure(figsize=(14, 10))
+    scatter = sns.scatterplot(
+        data=df,
+        x=x_col,
+        y=y_col,
+        hue=category_col,
+        palette='Set2',
+        s=100,
+        alpha=0.8
+    )
+    plt.title(f'{y_col} vs {x_col} categorizado por {category_col}', fontsize=14)
+    plt.xlabel(f'{x_col}', fontsize=12)
+    plt.ylabel(f'{y_col} Km²', fontsize=12)
 
-# Análise 1: Comparativo entre as cidades selecionadas
-cidades_alvo = ['Fortaleza', 'Quixadá', 'Caucaia']
-df_filtrado = df[df['Municípios'].isin(cidades_alvo)]
+    plt.legend(title=category_col, bbox_to_anchor=(0.5, -0.1), loc='upper center', ncol=3)
 
-# Gráfico de Barras Comparativo
-indicadores = [
-    'Índice de Desenvolvimento Humano Municipal (IDHM)',
-    'PIB per capita',
-    'Densidade demográfica',
-    'População no último censo'
-]
+    # Adicionar nomes das cidades destacadas
+    if highlight_cities:
+        for _, row in df[df['Municípios'].isin(highlight_cities)].iterrows():
+            plt.text(
+                row[x_col],
+                row[y_col],
+                row['Municípios'],
+                fontsize=10,
+                weight='bold',
+                color='black'
+            )
 
-plt.figure(figsize=(14, 8))
-for i, indicador in enumerate(indicadores, 1):
-    plt.subplot(2, 2, i)
-    barplot = sns.barplot(x='Municípios', y=indicador, data=df_filtrado)
-    plt.title(indicador.split('(')[0].strip())
-    plt.xticks(rotation=45)
-    barplot.bar_label(barplot.containers[0], fmt='%.3f')
-plt.tight_layout()
-plt.show()
+    plt.xscale('log')
+    plt.tight_layout()
+    plt.show()
 
-# Análise 2: Radar Chart Multidimensional
-categories = [
-    'IDHM',
-    'PIB per capita', 
-    'Densidade demográfica',
-    'Área urbanizada',
-    'Urbanização de vias públicas'
-]
+# Exemplo de uso
+if __name__ == "__main__":
+    # Configurações iniciais
+    numeric_cols = [
+        'Índice de Desenvolvimento Humano Municipal (IDHM)',
+        'PIB per capita',
+        'População no último censo',
+        'Densidade demográfica',
+        'Área urbanizada',
+        'Urbanização de vias públicas',
+        'Arborização de vias públicas'
+    ]
 
-# Preparar dados para o radar chart
-angles = [n / len(categories) * 2 * pi for n in range(len(categories))]
-angles += angles[:1]
-
-fig = plt.figure(figsize=(8, 8))
-ax = fig.add_subplot(111, polar=True)
-plt.xticks(angles[:-1], categories, color='grey', size=12)
-
-# Plotar cada cidade
-for idx, cidade in enumerate(df_filtrado['Municípios']):
-    valores = df_filtrado[df_filtrado['Municípios'] == cidade][[
+    comparative_bar_cols = [
         'Índice de Desenvolvimento Humano Municipal (IDHM)',
         'PIB per capita',
         'Densidade demográfica',
         'Área urbanizada',
-        'Urbanização de vias públicas'
-    ]].values.flatten().tolist()
-    
-    valores += valores[:1]
-    ax.plot(angles, valores, linewidth=2, linestyle='solid', label=cidade)
-    ax.fill(angles, valores, alpha=0.25)
+        'Urbanização de vias públicas',
+        'Arborização de vias públicas'
+    ]
 
-plt.title('Comparação Multidimensional das Cidades', size=15, y=1.1)
-plt.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1))
-plt.show()
+    cidades_alvo = ['Fortaleza', 'Quixadá', 'Caucaia']
 
-# Análise 3: Distribuição com Destaque para Cidades Selecionadas
-plt.figure(figsize=(14, 6))
-for i, var in enumerate(['PIB per capita', 'Densidade demográfica'], 1):
-    plt.subplot(1, 2, i)
-    
-    # Boxplot para toda a distribuição
-    sns.boxplot(x=var, data=df, color='#bdc3c7', width=0.4)
-    
-    # Swarmplot para as cidades destacadas
-    sns.swarmplot(x=var, data=df_filtrado, size=8, edgecolor='black', linewidth=1)
-    
-    plt.title(f'Distribuição de {var}')
-    plt.xlabel('')
-plt.tight_layout()
-plt.show()
+    # Carregar e limpar os dados
+    df = load_and_clean_data('data-ceara.csv', numeric_cols)
 
-# Análise 4: Relação IDHM vs PIB per capita
-plt.figure(figsize=(12, 8))
-scatter = sns.scatterplot(
-    x='Índice de Desenvolvimento Humano Municipal (IDHM)',
-    y='PIB per capita',
-    size='População no último censo',
-    hue='Mesorregião',
-    data=df,
-    palette='Set2',
-    sizes=(30, 400),
-    alpha=0.8
+    # Filtrar cidades-alvo
+    df_filtrado = df[df['Municípios'].isin(cidades_alvo)]
+
+    # Análise das trés cidades alvo
+    plot_comparative_bars(df, cidades_alvo, comparative_bar_cols[:4])
+
+    # Análise comparativa das cidades alvo com o resto do estado
+    plot_scatter_density_vs_area(
+    df,
+    x_col='Densidade demográfica',
+    y_col='Área urbanizada',
+    category_col='Mesorregião',
+    highlight_cities=['Fortaleza', 'Quixadá', 'Caucaia']
 )
-
-# Destacar as cidades-alvo
-for _, row in df_filtrado.iterrows():
-    scatter.text(
-        x=row['Índice de Desenvolvimento Humano Municipal (IDHM)'] + 0.005,
-        y=row['PIB per capita'] + 500,
-        s=row['Municípios'],
-        fontsize=10,
-        color='black',
-        ha='left',
-        va='center'
-    )
-
-plt.title('Relação entre Desenvolvimento Humano e Riqueza Municipal', size=14)
-plt.xlabel('Índice de Desenvolvimento Humano (IDHM)', size=12)
-plt.ylabel('PIB per capita (R$)', size=12)
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-plt.show()
+    
+    plot_scatter_density_vs_area(
+    df,
+    x_col='Densidade demográfica',
+    y_col='Área urbanizada',
+    category_col='Hierarquia urbana',
+    highlight_cities=['Fortaleza', 'Quixadá', 'Caucaia']
+)
